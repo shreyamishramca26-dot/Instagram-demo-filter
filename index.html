@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Comment Restrict – Demo (v3 • Humanities Mode)</title>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#111827; --muted:#1f2937; --text:#e5e7eb; --soft:#9ca3af;
+      --brand:#22c55e; --warn:#f59e0b; --danger:#ef4444; --accent:#60a5fa; --pink:#f472b6;
+    }
+    *{box-sizing:border-box}
+    body{ margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial; background:linear-gradient(180deg,#0b1227, #0f172a 40%,#0b1227); color:var(--text); }
+    .container{max-width:1200px; margin:32px auto; padding:0 16px}
+    .app{ display:grid; grid-template-columns: 380px 1fr; gap:20px; }
+    .card{background:rgba(17,24,39,.9); border:1px solid #1f2937; border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,.3)}
+    .card h2{margin:0 0 12px; font-size:18px}
+    header{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px}
+    .badge{font-size:12px; color:#0b1227; background:var(--brand); padding:4px 10px; border-radius:999px}
+    .muted{color:var(--soft)}
+    .row{display:flex; gap:10px}
+    .btn{cursor:pointer; border:none; border-radius:12px; padding:10px 14px; font-weight:600; color:#0b1227; background:var(--accent); transition:.2s;}
+    .btn:hover{filter:brightness(1.05)}
+    .btn.ghost{background:transparent; color:var(--text); border:1px solid #374151}
+    .btn.warn{background:var(--warn); color:#0b1227}
+    .btn.danger{background:var(--danger); color:#0b1227}
+    .btn.pink{background:var(--pink); color:#0b1227}
+    .tabbar{display:flex; gap:8px; padding:6px; background:#0b1227; border-radius:12px; border:1px solid #1f2937;}
+    .tab{flex:1; text-align:center; padding:10px 12px; border-radius:10px; cursor:pointer; font-weight:700; color:var(--soft)}
+    .tab.active{background:var(--muted); color:var(--text)}
+    input, textarea, select{ width:100%; padding:10px 12px; border-radius:12px; border:1px solid #374151; background:#0b1227; color:#fff; }
+    textarea{min-height:72px; resize:vertical}
+    .list{display:flex; flex-direction:column; gap:10px}
+    .comment{padding:12px; border:1px solid #1f2937; background:#0b1227; border-radius:14px; display:grid; grid-template-columns: 1fr auto; gap:8px; position:relative}
+    .comment .meta{font-size:12px; color:var(--soft)}
+    .pill{display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; font-size:12px; border:1px solid #374151}
+    .pill.red{border-color:#7f1d1d; color:#fecaca; background:#191313}
+    .pill.green{border-color:#14532d; color:#bbf7d0; background:#0f1a14}
+    .pill.amber{border-color:#78350f; color:#fde68a; background:#1a140a}
+    .pill.pink{border-color:#831843; color:#fbcfe8; background:#1e0d16}
+    .split{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+    .kvs{display:flex; flex-wrap:wrap; gap:6px}
+    .kv{background:#0b1227; border:1px dashed #334155; padding:6px 10px; border-radius:999px; font-size:12px; display:inline-flex; gap:6px; align-items:center}
+    .footer{margin-top:6px; font-size:12px; color:#9ca3af}
+    .hint{font-size:12px; color:#9ca3af; margin-top:6px}
+    .empty{padding:20px; text-align:center; color:var(--soft)}
+    .grid-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
+
+    /* Empathy overlay */
+    .overlay{
+      position:absolute; inset:0; backdrop-filter: blur(2px);
+      background:rgba(2,6,23,.6); border-radius:14px; display:flex; align-items:center; justify-content:center; padding:12px; text-align:center;
+    }
+    .overlay .box{background:#0b1227; border:1px solid #374151; padding:12px; border-radius:12px; max-width:520px}
+
+    /* Top banner */
+    .banner{position:sticky; top:0; z-index:10; margin-bottom:10px; border-radius:12px; padding:10px 12px; background:#0b1227; border:1px solid #334155; display:none}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1 style="margin:0; font-size:26px; letter-spacing:.3px;">🛡️ Smart Comment Restrict – <span class="muted">Humanities Mode</span></h1>
+      <span class="badge">v3</span>
+    </header>
+
+    <div id="banner" class="banner"></div>
+
+    <div class="app">
+      <!-- Settings Panel -->
+      <section class="card" style="padding:16px">
+        <h2>Settings</h2>
+        <div class="split">
+          <div>
+            <label>Restriction Level</label>
+            <select id="level">
+              <option value="low">Low (keywords only)</option>
+              <option value="medium">Medium (keywords + sentiment)</option>
+              <option value="high">High (strict sentiment)</option>
+            </select>
+          </div>
+          <div>
+            <label>Auto-Restrict New Users (0 followers)</label>
+            <select id="newUserPolicy">
+              <option value="off">Off</option>
+              <option value="on">On</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="split" style="margin-top:12px">
+          <div>
+            <label>Blocked Keywords (comma separated)</label>
+            <input id="keywords" placeholder="stupid, hate, troll" />
+            <div class="hint">Case-insensitive. Matches inside words also.</div>
+          </div>
+          <div>
+            <label>When keyword hits</label>
+            <select id="keywordAction">
+              <option value="hide">Hide comment</option>
+              <option value="mask">Mask bad words (show)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="split" style="margin-top:12px">
+          <div>
+            <label>Empathy Mode (soft-hide instead of hard restrict)</label>
+            <select id="empathyMode">
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </select>
+            <div class="hint">Soft overlay with “Show anyway” + gentle note.</div>
+          </div>
+          <div>
+            <label>Auto-Reply on Restriction</label>
+            <select id="autoReply">
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </select>
+            <div class="hint">Sends a polite acknowledgement message.</div>
+          </div>
+        </div>
+
+        <div class="split" style="margin-top:12px">
+          <div>
+            <label>Positive Reinforcement Tag</label>
+            <select id="positivityTag">
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </select>
+            <div class="hint">Adds “Thanks for kindness” to nice comments.</div>
+          </div>
+          <div>
+            <label>Reflection Prompt Threshold</label>
+            <select id="reflectThreshold">
+              <option value="3">3 negatives</option>
+              <option value="5">5 negatives</option>
+              <option value="8">8 negatives</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>Restricted Users</label>
+          <div id="restrictedUsers" class="kvs"></div>
+          <div class="row" style="margin-top:8px">
+            <input id="addRestrictUser" placeholder="username" />
+            <button class="btn ghost" id="btnAddRU">Add</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>Trusted Users (always allow)</label>
+          <div id="trustedUsers" class="kvs"></div>
+          <div class="row" style="margin-top:8px">
+            <input id="addTrustedUser" placeholder="username" />
+            <button class="btn ghost" id="btnAddTU">Add</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>Active Timeouts (temporary restrict)</label>
+          <div id="timeouts" class="kvs"></div>
+        </div>
+
+        <div class="footer">All settings persist in your browser (localStorage).</div>
+      </section>
+
+      <!-- Main Panel -->
+      <section class="card" style="padding:16px">
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:10px">
+          <div class="tabbar" role="tablist" aria-label="Comment Tabs">
+            <div class="tab active" id="tabAllowed">Allowed (<span id="countAllowed">0</span>)</div>
+            <div class="tab" id="tabRestricted">Restricted (<span id="countRestricted">0</span>)</div>
+          </div>
+          <div class="row">
+            <button class="btn" id="btnSeed">Seed Sample Comments</button>
+          </div>
+        </div>
+
+        <!-- Composer -->
+        <div class="card" style="padding:12px; background:#0b1227; border:1px solid #1f2937; margin-bottom:12px">
+          <h2 style="margin-bottom:8px">Add Comment (simulate)</h2>
+          <div class="grid-3">
+            <input id="inpUser" placeholder="username (e.g. john)" />
+            <input id="inpFollowers" type="number" placeholder="followers (e.g. 120)" />
+            <select id="inpTrusted">
+              <option value="no">Normal</option>
+              <option value="yes">Mark as Trusted (bypass)</option>
+            </select>
+          </div>
+          <textarea id="inpText" placeholder="Write a comment..."></textarea>
+          <div class="row" style="justify-content:flex-end; margin-top:8px">
+            <button class="btn" id="btnAdd">Post Comment</button>
+          </div>
+        </div>
+
+        <!-- Lists -->
+        <div id="allowedList" class="list" aria-live="polite"></div>
+        <div id="restrictedList" class="list" style="display:none" aria-live="polite"></div>
+      </section>
+    </div>
+
+    <p class="hint">Humanities Mode adds empathy overlays, polite auto-replies, positive tags, and reflection prompts for repeat negativity.</p>
+  </div>
+
+  <script>
+    // ---------------------- Persistence ----------------------
+    const store = {
+      load(){ try{ return JSON.parse(localStorage.getItem('scr-demo-v3')||'{}'); }catch{ return {}; } },
+      save(data){ localStorage.setItem('scr-demo-v3', JSON.stringify(data)); }
+    }
+
+    // ----------------------- State ---------------------------
+    const state = {
+      settings: {
+        level: 'medium', newUserPolicy: 'off', keywords: ['stupid','idiot','hate','trash','loser','troll'], keywordAction: 'hide',
+        empathyMode: 'on', autoReply: 'on', positivityTag: 'on', reflectThreshold: 3,
+        restrictedUsers: ['spam_bot'], trustedUsers: ['mod_team'], timeouts: {}
+      },
+      comments: [], // {id,user,followers,text,ts,restricted,reason,score,maskedText,softHidden,positive}
+      negCountByUser: {} // username -> count
+    }
+
+    Object.assign(state, store.load());
+
+    // ----------------- Sentiment/Abuse ----------------
+    const NEG = [ 'stupid','idiot','dumb','ugly','hate','trash','worst','loser','shut up','nonsense','lame','pathetic','toxic','cringe','kill','die','useless','moron','troll','bh*k','ch**','madarch','sale','haraam','chu*','bakwaas','ganda' ];
+
+    function sentimentScore(text){
+      const t = ' ' + text.toLowerCase() + ' ';
+      let score = 0;
+      NEG.forEach(w => { if(t.includes(' '+w+' ') || t.includes(w)) score -= 2; });
+      if((text.match(/!/g)||[]).length >= 3) score -= 1;
+      if(/[A-Z]{5,}/.test(text)) score -= 1;
+      if(/(hate|disgust|awful|terrible|garbage)/i.test(text)) score -= 1;
+      if(/(thanks|great|nice|love|awesome|cool|appreciate|helpful)/i.test(text)) score += 2; // stronger positive
+      return score; // negative is bad
+    }
+
+    function matchesKeywords(text, keywords){
+      const t = text.toLowerCase(); const hits=[];
+      keywords.filter(k=>k.trim()).forEach(k=>{ if(t.includes(k.trim().toLowerCase())) hits.push(k.trim()); });
+      return hits;
+    }
+
+    function maskBadWords(text, words){
+      let out = text; words.forEach(w=>{ if(!w) return; const re = new RegExp(w.replace(/[.*+?^${}()|[\]\]/g,'\$&'), 'gi'); out = out.replace(re, (m)=> m[0] + '*'.repeat(Math.max(0,m.length-2)) + (m.length>1?m[m.length-1]:'') ); }); return out;
+    }
+
+    function isTimedOut(user){ const exp = state.settings.timeouts[user]; return exp && Date.now() < exp; }
+    function timeLeft(user){ const exp = state.settings.timeouts[user]; if(!exp) return 0; return Math.max(0, exp - Date.now()); }
+
+    function shouldRestrict({user,followers,text}, settings){
+      const reasons = []; let restricted = false; let maskedText = null; let softHidden = false; let positive = false;
+
+      // trusted bypass
+      if(settings.trustedUsers.includes(user)) return {restricted:false, reasons:['Trusted user'], score:0, maskedText:null, softHidden:false, positive:false};
+
+      if(settings.restrictedUsers.includes(user)){ restricted = true; reasons.push(`User @${user} is restricted`); }
+      if(isTimedOut(user)){ restricted = true; reasons.push(`Timeout active (${Math.ceil(timeLeft(user)/3600000)}h left)`); }
+      if(settings.newUserPolicy==='on' && Number(followers||0)===0){ restricted = true; reasons.push('New account (0 followers)'); }
+
+      const hits = matchesKeywords(text, settings.keywords);
+      if(hits.length){
+        if(settings.keywordAction==='hide'){ restricted = true; reasons.push('Blocked keyword match'); }
+        else { maskedText = maskBadWords(text, hits); reasons.push('Keyword masked'); }
+      }
+
+      const score = sentimentScore(text);
+      const thresholds = { low: -999, medium: -2, high: -1 };
+      if(score >= 2) positive = true;
+
+      if(score <= thresholds[settings.level]){
+        // Empathy mode turns hard restriction into soft-hidden overlay
+        if(settings.empathyMode==='on' && !restricted){ softHidden = true; reasons.push(`Soft-hidden (score ${score})`); }
+        else { restricted = true; reasons.push(`Negative sentiment (score ${score})`); }
+      }
+
+      return {restricted, reasons, score, maskedText, softHidden, positive};
+    }
+
+    // ----------------------- UI ---------------------
+    const el = id => document.getElementById(id);
+    const ui = {
+      level: el('level'), newUserPolicy: el('newUserPolicy'), keywords: el('keywords'), keywordAction: el('keywordAction'),
+      empathyMode: el('empathyMode'), autoReply: el('autoReply'), positivityTag: el('positivityTag'), reflectThreshold: el('reflectThreshold'),
+      restrictedUsersWrap: el('restrictedUsers'), addRestrictUser: el('addRestrictUser'), btnAddRU: el('btnAddRU'),
+      trustedUsersWrap: el('trustedUsers'), addTrustedUser: el('addTrustedUser'), btnAddTU: el('btnAddTU'), timeoutsWrap: el('timeouts'),
+      tabAllowed: el('tabAllowed'), tabRestricted: el('tabRestricted'), allowedList: el('allowedList'), restrictedList: el('restrictedList'),
+      countAllowed: el('countAllowed'), countRestricted: el('countRestricted'),
+      inpUser: el('inpUser'), inpFollowers: el('inpFollowers'), inpTrusted: el('inpTrusted'), inpText: el('inpText'), btnAdd: el('btnAdd'), btnSeed: el('btnSeed'),
+      banner: el('banner')
+    }
+
+    function renderSettings(){
+      const s = state.settings;
+      ui.level.value = s.level; ui.newUserPolicy.value = s.newUserPolicy; ui.keywords.value = s.keywords.join(', ');
+      ui.keywordAction.value = s.keywordAction; ui.empathyMode.value = s.empathyMode; ui.autoReply.value = s.autoReply;
+      ui.positivityTag.value = s.positivityTag; ui.reflectThreshold.value = String(s.reflectThreshold);
+
+      // RU pills
+      ui.restrictedUsersWrap.innerHTML = '';
+      s.restrictedUsers.forEach(u=>{ const span=document.createElement('span'); span.className='kv'; span.textContent='@'+u; const x=document.createElement('button'); x.className='btn danger'; x.textContent='×'; x.style.padding='2px 8px'; x.title='Unrestrict'; x.onclick=()=>{ s.restrictedUsers = s.restrictedUsers.filter(x=>x!==u); persist(); renderSettings(); renderLists(); }; span.appendChild(x); ui.restrictedUsersWrap.appendChild(span); });
+
+      // Trusted pills
+      ui.trustedUsersWrap.innerHTML = '';
+      s.trustedUsers.forEach(u=>{ const span=document.createElement('span'); span.className='kv'; span.textContent='@'+u+' (trusted)'; const x=document.createElement('button'); x.className='btn danger'; x.textContent='×'; x.style.padding='2px 8px'; x.title='Remove from trusted'; x.onclick=()=>{ s.trustedUsers = s.trustedUsers.filter(x=>x!==u); persist(); renderSettings(); renderLists(); }; span.appendChild(x); ui.trustedUsersWrap.appendChild(span); });
+
+      // Timeouts
+      ui.timeoutsWrap.innerHTML = '';
+      Object.entries(s.timeouts).forEach(([u,exp])=>{ if(Date.now()>exp) return; const hours = Math.ceil((exp-Date.now())/3600000); const span=document.createElement('span'); span.className='kv'; span.textContent=`@${u} • ${hours}h left`; const x=document.createElement('button'); x.className='btn danger'; x.textContent='×'; x.style.padding='2px 8px'; x.title='Clear timeout'; x.onclick=()=>{ delete s.timeouts[u]; persist(); renderSettings(); renderLists(); }; span.appendChild(x); ui.timeoutsWrap.appendChild(span); });
+    }
+
+    function fmtTime(ts){ const d = new Date(ts); return d.toLocaleString(); }
+
+    function addAutoReply(targetUser, type){
+      if(state.settings.autoReply!=='on') return;
+      const messages = {
+        restricted: "We value your voice, but this comment is moved for review to keep the space respectful 🌸",
+        soft: "This message might feel hurtful to some. It's softly hidden. You can still choose to view it."
+      }
+      const text = type==='soft'?messages.soft:messages.restricted;
+      const c = { id: Date.now()+Math.random(), user:'mod_bot', followers:0, text:`@${targetUser} — ${text}`, ts: Date.now(), restricted:false, reason:['Auto-reply'], score:1, maskedText:null, softHidden:false, positive:true, system:true };
+      state.comments.unshift(c);
+    }
+
+    function maybeReflectPrompt(user){
+      const th = state.settings.reflectThreshold;
+      const count = state.negCountByUser[user]||0;
+      if(count >= th){
+        ui.banner.textContent = `Gentle reminder for @${user}: Words have power ✨ Please share your thoughts respectfully.`;
+        ui.banner.style.display = 'block';
+        // decay so it doesn't spam; reduce count slightly
+        state.negCountByUser[user] = th - 1;
+      }
+    }
+
+    function commentItem(c){
+      const wrap = document.createElement('div'); wrap.className='comment';
+      const left = document.createElement('div'); const right = document.createElement('div');
+
+      const meta = document.createElement('div'); meta.className='meta'; meta.textContent = `@${c.user} • ${fmtTime(c.ts)} • followers: ${c.followers}`;
+      const text = document.createElement('div'); text.textContent = c.maskedText || c.text;
+
+      const chips = document.createElement('div');
+      if(c.system){ const sys=document.createElement('span'); sys.className='pill.pink'; sys.textContent='system'; chips.appendChild(sys); }
+      if(c.restricted){ c.reason.forEach(r=>{ const pill=document.createElement('span'); pill.className='pill red'; pill.textContent=r; chips.appendChild(pill); }) }
+      else {
+        const ok=document.createElement('span'); ok.className='pill green'; ok.textContent='Allowed'; chips.appendChild(ok);
+        if(c.score<0){ const s=document.createElement('span'); s.className='pill amber'; s.textContent=`score ${c.score}`; chips.appendChild(s); }
+        if(c.maskedText){ const m=document.createElement('span'); m.className='pill amber'; m.textContent='masked'; chips.appendChild(m); }
+        if(c.positive && state.settings.positivityTag==='on'){ const p=document.createElement('span'); p.className='pill pink'; p.textContent='💖 Thanks for kindness!'; chips.appendChild(p); }
+      }
+
+      left.appendChild(meta); left.appendChild(text); left.appendChild(chips);
+
+      // empathy overlay
+      if(c.softHidden){
+        const ov = document.createElement('div'); ov.className='overlay';
+        ov.innerHTML = `<div class="box"><div style="margin-bottom:8px; font-weight:700">⚠ This message may be hurtful</div><div class="muted" style="margin-bottom:8px">We respect free expression. Do you still want to view it?</div><div class="row" style="justify-content:center"><button class="btn">Show Anyway</button><button class="btn ghost">Keep Hidden</button></div></div>`;
+        const btns = ov.querySelectorAll('button');
+        btns[0].onclick = ()=>{ c.softHidden = false; persist(); renderLists(); }
+        btns[1].onclick = ()=>{ /* keep it */ };
+        wrap.appendChild(ov);
+      }
+
+      // actions
+      const actions = document.createElement('div'); actions.style.display='flex'; actions.style.flexDirection='column'; actions.style.gap='8px';
+      const btnTimeout = document.createElement('button'); btnTimeout.className='btn warn'; btnTimeout.textContent='Timeout 24h';
+      btnTimeout.onclick = ()=>{ state.settings.timeouts[c.user] = Date.now()+24*3600000; persist(); renderSettings(); reevalAll(); }
+
+      const btnRestrictUser = document.createElement('button'); btnRestrictUser.className='btn warn'; btnRestrictUser.textContent='Restrict User';
+      btnRestrictUser.onclick = ()=>{ if(!state.settings.restrictedUsers.includes(c.user)) state.settings.restrictedUsers.push(c.user); persist(); renderSettings(); reevalAll(); }
+
+      const btnApprove = document.createElement('button'); btnApprove.className='btn'; btnApprove.textContent='Approve'; btnApprove.onclick = ()=>{ c.restricted = false; c.reason = ['Manually approved']; persist(); renderLists(); }
+      const btnDelete = document.createElement('button'); btnDelete.className='btn danger'; btnDelete.textContent='Delete'; btnDelete.onclick = ()=>{ state.comments = state.comments.filter(x=>x.id!==c.id); persist(); renderLists(); }
+
+      if(c.restricted){ actions.appendChild(btnApprove); }
+      actions.appendChild(btnTimeout); actions.appendChild(btnRestrictUser); actions.appendChild(btnDelete);
+
+      right.appendChild(actions);
+      wrap.appendChild(left); wrap.appendChild(right);
+      return wrap;
+    }
+
+    function renderLists(){
+      // expire timeouts
+      Object.entries(state.settings.timeouts).forEach(([u,exp])=>{ if(Date.now()>exp) delete state.settings.timeouts[u]; });
+
+      const allowed = state.comments.filter(c=>!c.restricted);
+      const restricted = state.comments.filter(c=>c.restricted);
+
+      ui.allowedList.innerHTML = ''; ui.restrictedList.innerHTML = '';
+      if(allowed.length===0){ const e=document.createElement('div'); e.className='empty'; e.textContent='No allowed comments yet'; ui.allowedList.appendChild(e); }
+      else { allowed.forEach(c=> ui.allowedList.appendChild(commentItem(c)) ); }
+
+      if(restricted.length===0){ const e=document.createElement('div'); e.className='empty'; e.textContent='No restricted comments'; ui.restrictedList.appendChild(e); }
+      else { restricted.forEach(c=> ui.restrictedList.appendChild(commentItem(c)) ); }
+
+      ui.countAllowed.textContent = allowed.length; ui.countRestricted.textContent = restricted.length;
+      persist();
+    }
+
+    function persist(){ store.save(state); }
+
+    // ---------------------- Events ---------------------------
+    ['level','newUserPolicy','keywordAction','empathyMode','autoReply','positivityTag','reflectThreshold'].forEach(k=>{
+      ui[k].onchange = ()=>{ state.settings[k] = (k==='reflectThreshold'? Number(ui[k].value) : ui[k].value); reevalAll(); }
+    });
+    ui.keywords.onchange=()=>{ state.settings.keywords = ui.keywords.value.split(',').map(s=>s.trim()).filter(Boolean); reevalAll(); }
+
+    ui.btnAddRU.onclick = ()=>{ const u = ui.addRestrictUser.value.trim(); if(!u) return; if(!state.settings.restrictedUsers.includes(u)) state.settings.restrictedUsers.push(u); ui.addRestrictUser.value=''; reevalAll(true); }
+    ui.btnAddTU.onclick = ()=>{ const u = ui.addTrustedUser.value.trim(); if(!u) return; if(!state.settings.trustedUsers.includes(u)) state.settings.trustedUsers.push(u); ui.addTrustedUser.value=''; reevalAll(true); }
+
+    ui.tabAllowed.onclick = ()=>{ ui.tabAllowed.classList.add('active'); ui.tabRestricted.classList.remove('active'); ui.allowedList.style.display='flex'; ui.restrictedList.style.display='none'; }
+    ui.tabRestricted.onclick = ()=>{ ui.tabRestricted.classList.add('active'); ui.tabAllowed.classList.remove('active'); ui.allowedList.style.display='none'; ui.restrictedList.style.display='flex'; }
+
+    ui.btnAdd.onclick = ()=>{
+      const user = (ui.inpUser.value||'guest').trim(); const followers = Number(ui.inpFollowers.value||0); const text = (ui.inpText.value||'').trim(); if(!text) return alert('Write a comment first');
+      if(ui.inpTrusted.value==='yes' && !state.settings.trustedUsers.includes(user)) state.settings.trustedUsers.push(user);
+      const now = Date.now(); const c = { id: now + Math.random(), user, followers, text, ts: now };
+      const dec = shouldRestrict(c, state.settings); Object.assign(c, {restricted:dec.restricted, reason:dec.reasons, score:dec.score, maskedText:dec.maskedText, softHidden:dec.softHidden, positive:dec.positive});
+
+      // track negativity count for reflection prompt
+      if(dec.score < 0){ state.negCountByUser[user] = (state.negCountByUser[user]||0)+1; maybeReflectPrompt(user); }
+
+      state.comments.unshift(c);
+
+      // humane auto-replies
+      if(dec.softHidden){ addAutoReply(user,'soft'); }
+      else if(dec.restricted){ addAutoReply(user,'restricted'); }
+
+      ui.inpText.value=''; renderSettings(); renderLists();
+    }
+
+    ui.btnSeed.onclick = ()=>{
+      const samples = [
+        {user:'spam_bot', followers:0, text:'FREE giveaway!!! click now!!!'},
+        {user:'kriti', followers:54, text:'Awesome post, love your content!'},
+        {user:'raj', followers:2, text:'This is stupid and worst idea ever!!!'},
+        {user:'arun', followers:0, text:'Nice pic'},
+        {user:'neo', followers:1200, text:'Shut up you troll. Such a useless page.'},
+        {user:'sam', followers:0, text:'I hate this. PATHETIC!'},
+        {user:'mira', followers:340, text:'Great tips, thanks for sharing ❤'},
+      ];
+      samples.forEach(s=>{
+        const now = Date.now() + Math.floor(Math.random()*1000);
+        const c = { id: now + Math.random(), ...s, ts: now };
+        const dec = shouldRestrict(c, state.settings);
+        Object.assign(c, {restricted:dec.restricted, reason:dec.reasons, score:dec.score, maskedText:dec.maskedText, softHidden:dec.softHidden, positive:dec.positive});
+        if(dec.score < 0){ state.negCountByUser[c.user] = (state.negCountByUser[c.user]||0)+1; }
+        state.comments.unshift(c);
+        if(dec.softHidden){ addAutoReply(c.user,'soft'); }
+        else if(dec.restricted){ addAutoReply(c.user,'restricted'); }
+      })
+      renderSettings(); renderLists();
+    }
+
+    function reevalAll(updateSettingsOnly=false){ if(updateSettingsOnly) persist(); state.comments = (state.comments||[]).map(c=>{ const d=shouldRestrict(c, state.settings); return {...c, restricted:d.restricted, reason:d.reasons, score:d.score, maskedText:d.maskedText, softHidden:d.softHidden, positive:d.positive}; }); renderSettings(); renderLists(); }
+
+    // ---------------------- Init -----------------------------
+    renderSettings(); state.comments = (state.comments||[]).map(c=>{ const d=shouldRestrict(c, state.settings); return {...c, restricted:d.restricted, reason:d.reasons, score:d.score, maskedText:d.maskedText, softHidden:d.softHidden, positive:d.positive}; }); renderLists();
+  </script>
+</body>
+</html>
